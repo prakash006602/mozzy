@@ -1,0 +1,49 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY = 'yourdockerhubuser/your-repo'
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        git url: 'https://your-repo-url.git', branch: 'main'
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        script {
+          docker.build("${REGISTRY}:${IMAGE_TAG}")
+        }
+      }
+    }
+
+    stage('Push to Registry') {
+      when { expression { env.REGISTRY_CREDENTIALS_ID } }
+      steps {
+        script {
+          docker.withRegistry('', "${REGISTRY_CREDENTIALS_ID}") {
+            docker.image("${REGISTRY}:${IMAGE_TAG}").push()
+          }
+        }
+      }
+    }
+
+    stage('Run Container') {
+      steps {
+        sh "docker run -d --name testsite -p 8080:80 ${REGISTRY}:${IMAGE_TAG}"
+      }
+    }
+  }
+
+  post {
+    cleanup {
+      sh 'docker rm -f testsite || true'
+      sh "docker rmi ${REGISTRY}:${IMAGE_TAG} || true"
+    }
+  }
+}
+
